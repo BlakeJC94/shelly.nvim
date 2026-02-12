@@ -159,6 +159,26 @@ local function extract_text_range(start_pos, end_pos, motion_type)
     return table.concat(lines, "\n")
 end
 
+-- Validate conditions before sending text (safety checks)
+local function validate_send_conditions()
+    -- Safety check: prevent sending text from terminal buffer to itself
+    if vim.bo.buftype == "terminal" then
+        vim.notify("Cannot send text from a terminal buffer to itself.", vim.log.levels.ERROR)
+        return false
+    end
+
+    -- Safety check: prevent sending text to shell processes
+    if is_shell_process(marked_terminal.job_id) then
+        vim.notify(
+            "Cannot send text: active process is your shell. Start a REPL first.",
+            vim.log.levels.ERROR
+        )
+        return false
+    end
+
+    return true
+end
+
 local function send_text_to_terminal(text)
     if not marked_terminal.buf or not vim.api.nvim_buf_is_valid(marked_terminal.buf) then
         vim.notify("No terminal available. Use :ShellyCycle or M.toggle() to create one first.", vim.log.levels.ERROR)
@@ -208,18 +228,7 @@ M.send_visual_selection = function()
 
     local text = table.concat(lines, "\n")
 
-    -- Safety check: prevent sending text from terminal buffer to itself
-    if vim.bo.buftype == "terminal" then
-        vim.notify("Cannot send text from a terminal buffer to itself.", vim.log.levels.ERROR)
-        return
-    end
-
-    -- Safety check: prevent sending text to shell processes
-    if is_shell_process(marked_terminal.job_id) then
-        vim.notify(
-            "Cannot send text: active process is a shell (sh/bash/zsh). Start a REPL first.",
-            vim.log.levels.ERROR
-        )
+    if not validate_send_conditions() then
         return
     end
 
@@ -273,18 +282,7 @@ M.send_current_cell = function()
 
     local text = table.concat(cell_lines, "\n")
 
-    -- Safety check: prevent sending text from terminal buffer to itself
-    if vim.bo.buftype == "terminal" then
-        vim.notify("Cannot send text from a terminal buffer to itself.", vim.log.levels.ERROR)
-        return
-    end
-
-    -- Safety check: prevent sending text to shell processes
-    if is_shell_process(marked_terminal.job_id) then
-        vim.notify(
-            "Cannot send text: active process is a shell (sh/bash/zsh). Start a REPL first.",
-            vim.log.levels.ERROR
-        )
+    if not validate_send_conditions() then
         return
     end
 
@@ -311,18 +309,7 @@ M.operator_send = function(motion_type)
     local text = extract_text_range(start_pos, end_pos, motion_type)
 
     if text then
-        -- Safety check: prevent sending text from terminal buffer to itself
-        if vim.bo.buftype == "terminal" then
-            vim.notify("Cannot send text from a terminal buffer to itself.", vim.log.levels.ERROR)
-            return
-        end
-
-        -- Safety check: prevent sending text to shell processes
-        if is_shell_process(marked_terminal.job_id) then
-            vim.notify(
-                "Cannot send text: active process is a shell (sh/bash/zsh). Start a REPL first.",
-                vim.log.levels.ERROR
-            )
+        if not validate_send_conditions() then
             return
         end
 
@@ -441,6 +428,10 @@ M.send_to_terminal = function(cmd_opts)
 end
 
 M.send_line = function()
+    if not validate_send_conditions() then
+        return
+    end
+
     send_text_to_terminal(vim.api.nvim_get_current_line())
 end
 
