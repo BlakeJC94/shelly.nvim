@@ -341,6 +341,13 @@ M.cycle = function()
     if not term.win or not vim.api.nvim_win_is_valid(term.win) then
         M.toggle()
     end
+    
+    -- Verify window is valid after toggle (could fail if job creation failed)
+    if not term.win or not vim.api.nvim_win_is_valid(term.win) then
+        vim.notify("Failed to open terminal window.", vim.log.levels.ERROR)
+        return
+    end
+    
     vim.api.nvim_set_current_win(term.win)
     vim.cmd.startinsert()
 end
@@ -381,9 +388,29 @@ M.toggle = function()
             local job_id = vim.fn.jobstart(cmd, { cwd = cwd, term = true })
             if job_id == 0 then
                 vim.notify("shelly: Invalid arguments for terminal command", vim.log.levels.ERROR)
+                -- Clean up on failure
+                if term.win and vim.api.nvim_win_is_valid(term.win) then
+                    vim.api.nvim_win_close(term.win, true)
+                end
+                if term.buf and vim.api.nvim_buf_is_valid(term.buf) then
+                    vim.api.nvim_buf_delete(term.buf, { force = true })
+                end
+                marked_terminal.buf = nil
+                marked_terminal.win = nil
+                marked_terminal.job_id = nil
                 return
             elseif job_id == -1 then
                 vim.notify("shelly: Terminal command not executable: " .. cmd, vim.log.levels.ERROR)
+                -- Clean up on failure
+                if term.win and vim.api.nvim_win_is_valid(term.win) then
+                    vim.api.nvim_win_close(term.win, true)
+                end
+                if term.buf and vim.api.nvim_buf_is_valid(term.buf) then
+                    vim.api.nvim_buf_delete(term.buf, { force = true })
+                end
+                marked_terminal.buf = nil
+                marked_terminal.win = nil
+                marked_terminal.job_id = nil
                 return
             end
             term.job_id = job_id
