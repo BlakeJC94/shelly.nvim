@@ -121,15 +121,15 @@ local function is_shell_process(job_id)
     if not process then
         return false
     end
-    
+
     -- Extract the basename from the process path
     local process_parts = vim.fn.split(process, "/")
     local process_name = process_parts[#process_parts]
-    
+
     -- Extract the basename from vim.o.shell (e.g., "/bin/bash" -> "bash")
     local shell_parts = vim.fn.split(vim.o.shell, "/")
     local shell_name = shell_parts[#shell_parts]
-    
+
     -- Compare the process name with the shell name
     return process_name == shell_name
 end
@@ -161,15 +161,7 @@ end
 
 local function send_text_to_terminal(text)
     if not marked_terminal.buf or not vim.api.nvim_buf_is_valid(marked_terminal.buf) then
-        -- Auto-toggle terminal if no marked terminal is found
-        M.toggle()
-        vim.defer_fn(function()
-            if not marked_terminal.buf or not vim.api.nvim_buf_is_valid(marked_terminal.buf) then
-                vim.notify("Failed to create terminal.", vim.log.levels.ERROR)
-                return
-            end
-            send_text_to_terminal(text)
-        end, 100)
+        vim.notify("No terminal available. Use :ShellyCycle or M.toggle() to create one first.", vim.log.levels.ERROR)
         return
     end
 
@@ -431,6 +423,19 @@ M.send_to_terminal = function(cmd_opts)
             end
             return vim.fn.expand(text:sub(pos))
         end)
+    end
+    -- Create terminal
+    if not marked_terminal.buf or not vim.api.nvim_buf_is_valid(marked_terminal.buf) then
+        -- Auto-toggle terminal if no marked terminal is found
+        M.toggle()
+        vim.defer_fn(function()
+            if not marked_terminal.buf or not vim.api.nvim_buf_is_valid(marked_terminal.buf) then
+                vim.notify("Failed to create terminal.", vim.log.levels.ERROR)
+                return
+            end
+            send_text_to_terminal(text)
+        end, 100)
+        return
     end
     send_text_to_terminal(text)
 end
