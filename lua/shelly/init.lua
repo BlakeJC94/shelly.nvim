@@ -169,10 +169,7 @@ local function validate_send_conditions()
 
     -- Safety check: prevent sending text to shell processes
     if is_shell_process(marked_terminal.job_id) then
-        vim.notify(
-            "Cannot send text: active process is your shell. Start a REPL first.",
-            vim.log.levels.ERROR
-        )
+        vim.notify("Cannot send text: active process is your shell. Start a REPL first.", vim.log.levels.ERROR)
         return false
     end
 
@@ -201,6 +198,45 @@ local function send_text_to_terminal(text)
     else
         vim.api.nvim_chan_send(marked_terminal.job_id, text .. "\n")
     end
+end
+
+local function is_cell_delimiter(line)
+    return string.match(line, "^%s*[#%-%-]%s+%%%%") or string.match(line, "^%s*In%[%d+%]") or string.match(line, "^```")
+end
+
+M.send_line = function()
+    if not validate_send_conditions() then
+        return
+    end
+
+    send_text_to_terminal(vim.api.nvim_get_current_line())
+end
+
+M.send_to_terminal = function(cmd_opts)
+    local text = cmd_opts.args
+    local current_file = vim.api.nvim_buf_get_name(0)
+    if current_file ~= "" then
+        text = text:gsub("()%%%S*", function(pos)
+            if pos > 1 and text:sub(pos - 1, pos - 1) == "\\" then
+                return nil
+            end
+            return vim.fn.expand(text:sub(pos))
+        end)
+    end
+    -- Create terminal
+    if not marked_terminal.buf or not vim.api.nvim_buf_is_valid(marked_terminal.buf) then
+        -- Auto-toggle terminal if no marked terminal is found
+        M.toggle()
+        vim.defer_fn(function()
+            if not marked_terminal.buf or not vim.api.nvim_buf_is_valid(marked_terminal.buf) then
+                vim.notify("Failed to create terminal.", vim.log.levels.ERROR)
+                return
+            end
+            send_text_to_terminal(text)
+        end, 100)
+        return
+    end
+    send_text_to_terminal(text)
 end
 
 M.send_visual_selection = function()
@@ -233,10 +269,6 @@ M.send_visual_selection = function()
     end
 
     send_text_to_terminal(text)
-end
-
-local function is_cell_delimiter(line)
-    return string.match(line, "^%s*[#%-%-]%s+%%%%") or string.match(line, "^%s*In%[%d+%]") or string.match(line, "^```")
 end
 
 M.send_current_cell = function()
@@ -341,13 +373,13 @@ M.cycle = function()
     if not term.win or not vim.api.nvim_win_is_valid(term.win) then
         M.toggle()
     end
-    
+
     -- Verify window is valid after toggle (could fail if job creation failed)
     if not term.win or not vim.api.nvim_win_is_valid(term.win) then
         vim.notify("Failed to open terminal window.", vim.log.levels.ERROR)
         return
     end
-    
+
     vim.api.nvim_set_current_win(term.win)
     vim.cmd.startinsert()
 end
@@ -425,41 +457,6 @@ M.toggle = function()
             vim.api.nvim_set_current_win(prev_win)
         end
     end
-end
-
-M.send_to_terminal = function(cmd_opts)
-    local text = cmd_opts.args
-    local current_file = vim.api.nvim_buf_get_name(0)
-    if current_file ~= "" then
-        text = text:gsub("()%%%S*", function(pos)
-            if pos > 1 and text:sub(pos - 1, pos - 1) == "\\" then
-                return nil
-            end
-            return vim.fn.expand(text:sub(pos))
-        end)
-    end
-    -- Create terminal
-    if not marked_terminal.buf or not vim.api.nvim_buf_is_valid(marked_terminal.buf) then
-        -- Auto-toggle terminal if no marked terminal is found
-        M.toggle()
-        vim.defer_fn(function()
-            if not marked_terminal.buf or not vim.api.nvim_buf_is_valid(marked_terminal.buf) then
-                vim.notify("Failed to create terminal.", vim.log.levels.ERROR)
-                return
-            end
-            send_text_to_terminal(text)
-        end, 100)
-        return
-    end
-    send_text_to_terminal(text)
-end
-
-M.send_line = function()
-    if not validate_send_conditions() then
-        return
-    end
-
-    send_text_to_terminal(vim.api.nvim_get_current_line())
 end
 
 M.setup = function(opts)
