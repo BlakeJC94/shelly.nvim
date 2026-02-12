@@ -459,7 +459,7 @@ M.setup = function(opts)
         {
             name = "ShellyCycle",
             fn = M.cycle,
-            opts = { desc = "Send current cell (between # %%, -- %%, In[n], or ``` markers) to the marked terminal" },
+            opts = { desc = "Toggle terminal focus and mode" },
         },
     }
 
