@@ -121,9 +121,17 @@ local function is_shell_process(job_id)
     if not process then
         return false
     end
+    
+    -- Extract the basename from the process path
     local process_parts = vim.fn.split(process, "/")
-    local process_head = process_parts[#process_parts]
-    return process_head == "sh" or process_head == "bash" or process_head == "zsh"
+    local process_name = process_parts[#process_parts]
+    
+    -- Extract the basename from vim.o.shell (e.g., "/bin/bash" -> "bash")
+    local shell_parts = vim.fn.split(vim.o.shell, "/")
+    local shell_name = shell_parts[#shell_parts]
+    
+    -- Compare the process name with the shell name
+    return process_name == shell_name
 end
 
 -- Extract text from a range (used by both visual selection and operator motions)
