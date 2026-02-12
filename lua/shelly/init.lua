@@ -1,38 +1,3 @@
--- Install with lazy.nvim
--- {
---     "https://github.com/BlakeJC94/shelly.nvim",
---     lazy = false,
---     opts = {
---         split = {
---             direction = "horizontal",
---             size = 14,
---             position = "bottom",
---         },
---     },
---     keys = {
---         {
---
---             "<C-Space>",
---             function()
---                 require("shelly").cycle()
---             end,
---             mode = { "n", "t" },
---         },
---         {
---             "<Leader>a",
---             ":Shelly ",
---             mode = "n",
---         },
---         {
---             "<Leader>A",
---             function()
---                 require("shelly").toggle()
---             end,
---             mode = "n",
---         },
---     },
--- },
-
 local M = {}
 
 -- Store the marked terminal info
@@ -183,7 +148,7 @@ local function extract_text_range(start_pos, end_pos, motion_type)
     return table.concat(lines, "\n")
 end
 
-local function send_to_terminal(text)
+local function send_text_to_terminal(text)
     if not marked_terminal.buf or not vim.api.nvim_buf_is_valid(marked_terminal.buf) then
         -- Auto-toggle terminal if no marked terminal is found
         M.toggle()
@@ -192,7 +157,7 @@ local function send_to_terminal(text)
                 vim.notify("Failed to create terminal.", vim.log.levels.ERROR)
                 return
             end
-            send_to_terminal(text)
+            send_text_to_terminal(text)
         end, 100)
         return
     end
@@ -215,7 +180,7 @@ local function send_to_terminal(text)
     end
 end
 
-local function send_visual_selection()
+M.send_visual_selection = function()
     -- Exit visual mode to update '< and '> marks, then get the selection
     -- This ensures we get the actual selected range regardless of selection direction
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "x", false)
@@ -255,14 +220,14 @@ local function send_visual_selection()
         return
     end
 
-    send_to_terminal(text)
+    send_text_to_terminal(text)
 end
 
 local function is_cell_delimiter(line)
     return string.match(line, "^%s*[#%-%-]%s+%%%%") or string.match(line, "^%s*In%[%d+%]") or string.match(line, "^```")
 end
 
-local function send_current_cell()
+M.send_current_cell = function()
     local current_line = vim.api.nvim_win_get_cursor(0)[1]
     local total_lines = vim.api.nvim_buf_line_count(0)
     local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
@@ -320,7 +285,7 @@ local function send_current_cell()
         return
     end
 
-    send_to_terminal(text)
+    send_text_to_terminal(text)
 
     -- Jump to the next cell if it exists
     if next_cell_start then
@@ -358,7 +323,7 @@ M.operator_send = function(motion_type)
             return
         end
 
-        send_to_terminal(text)
+        send_text_to_terminal(text)
     end
 end
 
@@ -445,6 +410,24 @@ M.toggle = function()
     end
 end
 
+M.send_to_terminal = function(cmd_opts)
+    local text = cmd_opts.args
+    local current_file = vim.api.nvim_buf_get_name(0)
+    if current_file ~= "" then
+        text = text:gsub("()%%%S*", function(pos)
+            if pos > 1 and text:sub(pos - 1, pos - 1) == "\\" then
+                return nil
+            end
+            return vim.fn.expand(text:sub(pos))
+        end)
+    end
+    send_text_to_terminal(text)
+end
+
+M.send_line = function()
+    send_text_to_terminal(vim.api.nvim_get_current_line())
+end
+
 M.setup = function(opts)
     CONFIG = vim.tbl_deep_extend("force", CONFIG, opts or {})
 
@@ -452,67 +435,34 @@ M.setup = function(opts)
     local commands = {
         {
             name = "Shelly",
-            fn = function(cmd_opts)
-                local text = cmd_opts.args
-                local current_file = vim.api.nvim_buf_get_name(0)
-                if current_file ~= "" then
-                    text = text:gsub("()%%%S*", function(pos)
-                        if pos > 1 and text:sub(pos - 1, pos - 1) == "\\" then
-                            return nil
-                        end
-                        return vim.fn.expand(text:sub(pos))
-                    end)
-                end
-                send_to_terminal(text)
-            end,
+            fn = M.send_to_terminal,
             opts = { nargs = "+", desc = "Send arbitrary text to the marked terminal (auto-detects IPython)" },
         },
         {
-            name = "SendLine",
-            fn = function()
-                send_to_terminal(vim.api.nvim_get_current_line())
-            end,
+            name = "ShellySendLine",
+            fn = M.send_line,
             opts = { desc = "Send current line to the marked terminal (auto-detects IPython)" },
         },
         {
-            name = "SendSelection",
-            fn = send_visual_selection,
+            name = "ShellySendSelection",
+            fn = M.send_visual_selection,
             opts = { range = true, desc = "Send visual selection to the marked terminal (auto-detects IPython)" },
         },
         {
-            name = "SendCell",
-            fn = send_current_cell,
+            name = "ShellySendCell",
+            fn = M.send_current_cell,
             opts = { desc = "Send current cell (between # %%, -- %%, In[n], or ``` markers) to the marked terminal" },
         },
         {
-            name = "ShellyDebug",
-            fn = function()
-                if not marked_terminal.job_id then
-                    vim.notify("No marked terminal found", vim.log.levels.WARN)
-                    return
-                end
-                local process = get_terminal_process(marked_terminal.job_id)
-                local is_shell = is_shell_process(marked_terminal.job_id)
-                vim.notify(
-                    string.format("Process: %s | Is shell: %s", process or "nil", tostring(is_shell)),
-                    vim.log.levels.INFO
-                )
-            end,
-            opts = { desc = "Debug: Show current terminal process" },
+            name = "ShellyCycle",
+            fn = M.cycle,
+            opts = { desc = "Send current cell (between # %%, -- %%, In[n], or ``` markers) to the marked terminal" },
         },
     }
 
     for _, cmd in ipairs(commands) do
         vim.api.nvim_create_user_command(cmd.name, cmd.fn, cmd.opts)
     end
-
-    -- Set up key mappings
-    vim.keymap.set("x", "<C-c>", send_visual_selection, { desc = "Send selection to terminal", silent = true })
-    vim.keymap.set("n", "<C-c><C-c>", send_current_cell, { desc = "Send current cell to terminal", silent = true })
-    vim.keymap.set("n", "<C-c>", function()
-        vim.o.operatorfunc = "v:lua.require'shelly'.operator_send"
-        return "g@"
-    end, { expr = true, desc = "Send motion to terminal", silent = true })
 
     -- Kill all terminal buffers on exit
     vim.api.nvim_create_autocmd("VimLeavePre", {
