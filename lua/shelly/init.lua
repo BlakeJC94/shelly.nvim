@@ -208,16 +208,21 @@ local function send_to_terminal(text)
 end
 
 local function send_visual_selection()
+    -- Exit visual mode to update '< and '> marks, then get the selection
+    -- This ensures we get the actual selected range regardless of selection direction
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'x', false)
+
     local start_pos = vim.fn.getpos("'<")
     local end_pos = vim.fn.getpos("'>")
 
-    -- Adjust for visual selection (different indexing than marks)
+    -- Get lines in the visual selection range
     local lines = vim.api.nvim_buf_get_lines(0, start_pos[2] - 1, end_pos[2], false)
 
     if #lines == 0 then
         return
     end
 
+    -- Trim to the selected columns
     if #lines == 1 then
         lines[1] = string.sub(lines[1], start_pos[3], end_pos[3])
     else
@@ -472,7 +477,7 @@ M.setup = function(opts)
     end
 
     -- Set up key mappings
-    vim.keymap.set("v", "<C-c>", send_visual_selection, { desc = "Send selection to terminal", silent = true })
+    vim.keymap.set("x", "<C-c>", send_visual_selection, { desc = "Send selection to terminal", silent = true })
     vim.keymap.set("n", "<C-c><C-c>", send_current_cell, { desc = "Send current cell to terminal", silent = true })
     vim.keymap.set("n", "<C-c>", function()
         vim.o.operatorfunc = "v:lua.require'shelly'.operator_send"
