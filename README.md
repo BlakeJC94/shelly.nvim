@@ -4,6 +4,8 @@ A minimal Neovim plugin for managing a toggleable terminal and sending text to
 it. Designed for REPL-driven development with IPython support and cell-based
 execution.
 
+<script src="https://asciinema.org/a/JJ0GkHbsqKCJIKUj.js" id="asciicast-JJ0GkHbsqKCJIKUj" async="true"></script>
+
 ## Features
 
 - **Toggleable terminal** – Horizontal or vertical split that remains visible
