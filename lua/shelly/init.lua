@@ -118,6 +118,9 @@ end
 
 local function is_shell_process(job_id)
     local process = get_terminal_process(job_id)
+    if not process then
+        return false
+    end
     local process_parts = vim.fn.split(process, "/")
     local process_head = process_parts[#process_parts]
     return process_head == "sh" or process_head == "bash" or process_head == "zsh"
