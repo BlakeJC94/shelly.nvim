@@ -364,7 +364,7 @@ M.toggle = function()
     -- Create buffer if needed
     if not buf_ready then
         term.buf = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_option(term.buf, "buflisted", false)
+        vim.bo[term.buf].buflisted = false
         vim.api.nvim_buf_set_name(term.buf, "Shelly")
 
         vim.api.nvim_create_autocmd("BufDelete", {
