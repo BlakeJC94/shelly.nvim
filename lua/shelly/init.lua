@@ -11,8 +11,16 @@
 --     },
 --     keys = {
 --         {
+--
+--             "<C-Space>",
+--             function()
+--                 require("shelly").cycle()
+--             end,
+--             mode = { "n", "t" },
+--         },
+--         {
 --             "<Leader>a",
---             ":Shell ",
+--             ":Shelly ",
 --             mode = "n",
 --         },
 --         {
@@ -210,7 +218,7 @@ end
 local function send_visual_selection()
     -- Exit visual mode to update '< and '> marks, then get the selection
     -- This ensures we get the actual selected range regardless of selection direction
-    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'x', false)
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "x", false)
 
     local start_pos = vim.fn.getpos("'<")
     local end_pos = vim.fn.getpos("'>")
@@ -354,6 +362,34 @@ M.operator_send = function(motion_type)
     end
 end
 
+M.cycle = function()
+    local term = marked_terminal
+    local current_buf = vim.api.nvim_get_current_buf()
+    local mode = vim.api.nvim_get_mode().mode
+
+    if term.buf and current_buf == term.buf then
+        if mode == "t" then
+            -- Case 1: Terminal mode in marked terminal - exit terminal mode and jump to bottom
+            vim.cmd("stopinsert")
+            vim.schedule(function()
+                vim.cmd.norm("G")
+            end)
+            return
+        else
+            -- Case 2: Normal mode in marked terminal - go to last active window
+            vim.cmd("wincmd w")
+        end
+        return
+    end
+
+    -- Case 3: Normal mode elsewhere - toggle terminal to visible if needed and start terminal mode
+    if not term.win or not vim.api.nvim_win_is_valid(term.win) then
+        M.toggle()
+    end
+    vim.api.nvim_set_current_win(term.win)
+    vim.cmd.startinsert()
+end
+
 M.toggle = function()
     local term = marked_terminal
     local cmd = eval_opts(CONFIG.cmd) or vim.o.shell
@@ -365,13 +401,6 @@ M.toggle = function()
         term.buf = vim.api.nvim_create_buf(false, true)
         vim.api.nvim_buf_set_option(term.buf, "buflisted", false)
         vim.api.nvim_buf_set_name(term.buf, "Shelly")
-        vim.keymap.set("n", "<C-Space>", "<C-w><C-w>", { buffer = term.buf, desc = "Cycle to next window" })
-        vim.keymap.set(
-            "t",
-            "<C-Space>",
-            "<C-\\><C-n>G",
-            { buffer = term.buf, desc = "Exit terminal mode, jump to bottom" }
-        )
 
         vim.api.nvim_create_autocmd("BufDelete", {
             buffer = term.buf,
@@ -407,6 +436,7 @@ M.toggle = function()
             term.job_id = vim.b[term.buf].terminal_job_id
         end
 
+        -- This enables the terminal to auto-scroll
         vim.cmd.norm("G")
 
         if vim.api.nvim_win_is_valid(prev_win) then
@@ -483,18 +513,6 @@ M.setup = function(opts)
         vim.o.operatorfunc = "v:lua.require'shelly'.operator_send"
         return "g@"
     end, { expr = true, desc = "Send motion to terminal", silent = true })
-
-    -- Global mapping to jump to terminal and enter insert mode
-    vim.keymap.set("n", "<C-Space>", function()
-        local term = marked_terminal
-        -- If terminal window is not open, toggle it
-        if not term.win or not vim.api.nvim_win_is_valid(term.win) then
-            M.toggle()
-        end
-        vim.api.nvim_set_current_win(term.win)
-        -- Start insert mode
-        vim.cmd.startinsert()
-    end, { desc = "Jump to terminal and enter insert mode", silent = true })
 
     -- Kill all terminal buffers on exit
     vim.api.nvim_create_autocmd("VimLeavePre", {
