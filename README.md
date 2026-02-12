@@ -15,23 +15,72 @@ execution.
 
 ## Installation
 
-**lazy.nvim:**
+**`lazy.nvim`:**
 
 ```lua
 {
     "BlakeJC94/shelly.nvim",
-    lazy = false,
+    commands = {
+        "Shelly",
+        "ShellyCycle",
+        "ShellySendCell",
+        "ShellySendLine",
+        "ShellySendSelection",
+    },
     opts = {
         split = {
             direction = "horizontal",
-            size = 16,
+            size = 14,
             position = "bottom",
         },
     },
-    -- Optional: Set additional keymaps
     keys = {
-        { "<Leader>a", ":Shell ", mode = "n" },
-        { "<Leader>A", function() require("shelly").toggle() end, mode = "n" },
+        {
+
+            "<C-Space>",
+            function()
+                require("shelly").cycle()
+            end,
+            mode = { "n", "t" },
+        },
+        {
+            "<C-c>",
+            function()
+                require("shelly").send_visual_selection()
+            end,
+            mode = "x",
+            desc = "Send visual selection to terminal",
+        },
+        {
+            "<C-c><C-c>",
+            function()
+                require("shelly").send_current_cell()
+            end,
+            mode = "n",
+            desc = "Send current cell to terminal",
+        },
+        {
+            "<C-c>",
+            function()
+                vim.o.operatorfunc = "v:lua.require'shelly'.operator_send"
+                return "g@"
+            end,
+            mode = "n",
+            expr = true,
+            desc = "Send motion to terminal",
+        },
+        {
+            "<Leader>a",
+            ":Shelly ",
+            mode = "n",
+        },
+        {
+            "<Leader>A",
+            function()
+                require("shelly").toggle()
+            end,
+            mode = "n",
+        },
     },
 }
 ```
@@ -68,10 +117,10 @@ require("shelly").setup({
 | Command | Description |
 |---------|-------------|
 | `:Shelly <text>` | Send text to terminal (supports `%` expansion) |
-| `:SendLine` | Send current line |
-| `:SendSelection` | Send visual selection (range command) |
-| `:SendCell` | Send current cell (between delimiters) |
-| `:ShellyDebug` | Show current terminal process info |
+| `:ShellySendLine` | Send current line |
+| `:ShellySendSelection` | Send visual selection (range command) |
+| `:ShellySendCell` | Send current cell (between delimiters) |
+| `:ShellyCycle` | Toggle terminal focus and mode |
 
 ### Default Keymaps
 
