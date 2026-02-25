@@ -384,13 +384,67 @@ M.cycle = function()
     vim.cmd.startinsert()
 end
 
-M.toggle = function()
+local init_buffer = function(buf_ready)
     local term = marked_terminal
     local cmd = eval_opts(CONFIG.cmd) or vim.o.shell
     local cwd = eval_opts(CONFIG.cwd) or vim.fn.getcwd()
+    buf_ready = buf_ready or false
+
+    if not buf_ready then
+        local job_id = vim.fn.jobstart(cmd, { cwd = cwd, term = true })
+        if job_id == 0 then
+            vim.notify("shelly: Invalid arguments for terminal command", vim.log.levels.ERROR)
+            -- Clean up on failure
+            if term.win and vim.api.nvim_win_is_valid(term.win) then
+                vim.api.nvim_win_close(term.win, true)
+            end
+            if term.buf and vim.api.nvim_buf_is_valid(term.buf) then
+                vim.api.nvim_buf_delete(term.buf, { force = true })
+            end
+            marked_terminal.buf = nil
+            marked_terminal.win = nil
+            marked_terminal.job_id = nil
+            return
+        elseif job_id == -1 then
+            vim.notify("shelly: Terminal command not executable: " .. cmd, vim.log.levels.ERROR)
+            -- Clean up on failure
+            if term.win and vim.api.nvim_win_is_valid(term.win) then
+                vim.api.nvim_win_close(term.win, true)
+            end
+            if term.buf and vim.api.nvim_buf_is_valid(term.buf) then
+                vim.api.nvim_buf_delete(term.buf, { force = true })
+            end
+            marked_terminal.buf = nil
+            marked_terminal.win = nil
+            marked_terminal.job_id = nil
+            return
+        end
+        term.job_id = job_id
+    else
+        term.job_id = vim.b[term.buf].terminal_job_id
+    end
+end
+
+local is_open = function()
+    local term = marked_terminal
+    return term.win and vim.api.nvim_win_is_valid(term.win)
+end
+
+M.toggle = function()
+    if is_open() then
+        M.close()
+    else
+        M.open()
+    end
+end
+
+M.open = function()
+    if is_open() then
+        return
+    end
+    local term = marked_terminal
     local buf_ready = term.buf and vim.api.nvim_buf_is_valid(term.buf)
 
-    -- Create buffer if needed
     if not buf_ready then
         term.buf = vim.api.nvim_create_buf(false, true)
         vim.bo[term.buf].buflisted = false
@@ -407,55 +461,24 @@ M.toggle = function()
         })
     end
 
-    -- Toggle window
-    if term.win and vim.api.nvim_win_is_valid(term.win) then
+    local prev_win = vim.api.nvim_get_current_win()
+    term.win = create_win(CONFIG, term.buf)
+
+    init_buffer(buf_ready)
+
+    -- This enables the terminal to auto-scroll
+    vim.cmd.norm("G")
+
+    if vim.api.nvim_win_is_valid(prev_win) then
+        vim.api.nvim_set_current_win(prev_win)
+    end
+end
+
+M.close = function()
+    local term = marked_terminal
+    if is_open() then
         vim.api.nvim_win_close(term.win, true)
         term.win = nil
-    else
-        local prev_win = vim.api.nvim_get_current_win()
-        term.win = create_win(CONFIG, term.buf)
-
-        -- Start terminal if buffer is new
-        if not buf_ready then
-            local job_id = vim.fn.jobstart(cmd, { cwd = cwd, term = true })
-            if job_id == 0 then
-                vim.notify("shelly: Invalid arguments for terminal command", vim.log.levels.ERROR)
-                -- Clean up on failure
-                if term.win and vim.api.nvim_win_is_valid(term.win) then
-                    vim.api.nvim_win_close(term.win, true)
-                end
-                if term.buf and vim.api.nvim_buf_is_valid(term.buf) then
-                    vim.api.nvim_buf_delete(term.buf, { force = true })
-                end
-                marked_terminal.buf = nil
-                marked_terminal.win = nil
-                marked_terminal.job_id = nil
-                return
-            elseif job_id == -1 then
-                vim.notify("shelly: Terminal command not executable: " .. cmd, vim.log.levels.ERROR)
-                -- Clean up on failure
-                if term.win and vim.api.nvim_win_is_valid(term.win) then
-                    vim.api.nvim_win_close(term.win, true)
-                end
-                if term.buf and vim.api.nvim_buf_is_valid(term.buf) then
-                    vim.api.nvim_buf_delete(term.buf, { force = true })
-                end
-                marked_terminal.buf = nil
-                marked_terminal.win = nil
-                marked_terminal.job_id = nil
-                return
-            end
-            term.job_id = job_id
-        else
-            term.job_id = vim.b[term.buf].terminal_job_id
-        end
-
-        -- This enables the terminal to auto-scroll
-        vim.cmd.norm("G")
-
-        if vim.api.nvim_win_is_valid(prev_win) then
-            vim.api.nvim_set_current_win(prev_win)
-        end
     end
 end
 
@@ -468,6 +491,21 @@ M.setup = function(opts)
             name = "Shelly",
             fn = M.send_to_terminal,
             opts = { nargs = "+", desc = "Send arbitrary text to the marked terminal (auto-detects IPython)" },
+        },
+        {
+            name = "ShellyToggle",
+            fn = M.toggle,
+            opts = { desc = "" },
+        },
+        {
+            name = "ShellyOpen",
+            fn = M.open,
+            opts = { desc = "" },
+        },
+        {
+            name = "ShellyClose",
+            fn = M.close,
+            opts = { desc = "" },
         },
         {
             name = "ShellySendLine",

@@ -22,8 +22,11 @@ execution.
 ```lua
 {
     "BlakeJC94/shelly.nvim",
-    commands = {
+    cmd = {
         "Shelly",
+        "ShellyToggle",
+        "ShellyOpen",
+        "ShellyClose",
         "ShellyCycle",
         "ShellySendCell",
         "ShellySendLine",
