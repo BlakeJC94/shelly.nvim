@@ -1,8 +1,13 @@
+--- Shelly: A Neovim terminal plugin for REPL integration
+--- Provides functions to interact with terminal buffers, send code, and manage terminal windows
 local M = {}
 
--- Store the marked terminal info
+--- Store the marked terminal info
+--- @type { buf: number?, job_id: number?, win: number? }
 local marked_terminal = { buf = nil, job_id = nil, win = nil }
 
+--- Default configuration for Shelly
+--- @type table
 local CONFIG = {
     cmd = vim.o.shell,
     cwd = vim.fn.getcwd,
@@ -22,6 +27,9 @@ local CONFIG = {
     },
 }
 
+--- Recursively evaluate options, calling functions and traversing tables
+--- @param opts any Option value (function, table, or primitive)
+--- @return any Evaluated option value
 local function eval_opts(opts)
     if type(opts) == "function" then
         return opts()
@@ -36,6 +44,9 @@ local function eval_opts(opts)
     return opts
 end
 
+--- Generate the Vim split command based on configuration
+--- @param config table Configuration containing split settings
+--- @return string Vim command string for creating a split
 local function get_split_cmd(config)
     local opts = eval_opts(config.split)
     local pos = (opts.position == "left" or opts.position == "top") and "topleft" or "botright"
@@ -43,6 +54,10 @@ local function get_split_cmd(config)
     return pos .. dir .. " " .. opts.size .. "split"
 end
 
+--- Create a new window split and configure window options
+--- @param config table Configuration containing split and window settings
+--- @param buf number Buffer number to display in the window
+--- @return number Window handle
 local function create_win(config, buf)
     vim.cmd(get_split_cmd(config))
     local win = vim.api.nvim_get_current_win()
@@ -53,6 +68,9 @@ local function create_win(config, buf)
     return win
 end
 
+--- Detect if the terminal buffer is running IPython
+--- @param buf number Buffer number to check
+--- @return boolean True if IPython is detected
 local function is_ipython(buf)
     if not vim.api.nvim_buf_is_valid(buf) then
         return false
@@ -67,6 +85,10 @@ local function is_ipython(buf)
     return false
 end
 
+--- Get the name of the process running in the terminal
+--- First tries to get the foreground child process, falls back to the terminal process itself
+--- @param job_id number? Terminal job ID
+--- @return string? Process name or nil if not found
 local function get_terminal_process(job_id)
     if not job_id then
         return nil
@@ -116,6 +138,9 @@ local function get_terminal_process(job_id)
     return result
 end
 
+--- Check if the terminal is running the shell (not a REPL or other program)
+--- @param job_id number? Terminal job ID
+--- @return boolean True if the process is the shell
 local function is_shell_process(job_id)
     local process = get_terminal_process(job_id)
     if not process then
@@ -134,7 +159,11 @@ local function is_shell_process(job_id)
     return process_name == shell_name
 end
 
--- Extract text from a range (used by both visual selection and operator motions)
+--- Extract text from a range (used by both visual selection and operator motions)
+--- @param start_pos table Start position {line, col}
+--- @param end_pos table End position {line, col}
+--- @param motion_type string Type of motion: "line" or "char"
+--- @return string? Extracted text or nil if no text found
 local function extract_text_range(start_pos, end_pos, motion_type)
     local lines = vim.api.nvim_buf_get_lines(0, start_pos[1] - 1, end_pos[1], false)
 
@@ -159,7 +188,8 @@ local function extract_text_range(start_pos, end_pos, motion_type)
     return table.concat(lines, "\n")
 end
 
--- Validate conditions before sending text (safety checks)
+--- Validate conditions before sending text (safety checks)
+--- @return boolean True if conditions are valid for sending text
 local function validate_send_conditions()
     -- Safety check: prevent sending text from terminal buffer to itself
     if vim.bo.buftype == "terminal" then
@@ -176,6 +206,8 @@ local function validate_send_conditions()
     return true
 end
 
+--- Send text to the marked terminal, auto-detecting IPython mode
+--- @param text string Text to send to the terminal
 local function send_text_to_terminal(text)
     if not marked_terminal.buf or not vim.api.nvim_buf_is_valid(marked_terminal.buf) then
         vim.notify("No terminal available. Use :ShellyCycle or M.toggle() to create one first.", vim.log.levels.ERROR)
@@ -200,10 +232,14 @@ local function send_text_to_terminal(text)
     end
 end
 
+--- Check if a line is a cell delimiter (for cell-based execution)
+--- @param line string Line of text to check
+--- @return boolean True if line is a cell delimiter
 local function is_cell_delimiter(line)
     return string.match(line, "^%s*[#%-%-]%s+%%%%") or string.match(line, "^%s*In%[%d+%]") or string.match(line, "^```")
 end
 
+--- Send the current line to the terminal
 M.send_line = function()
     if not validate_send_conditions() then
         return
@@ -212,6 +248,9 @@ M.send_line = function()
     send_text_to_terminal(vim.api.nvim_get_current_line())
 end
 
+--- Send arbitrary text to the terminal (used by :Shelly command)
+--- Supports % expansions for file paths
+--- @param cmd_opts table Command options containing args field
 M.send_to_terminal = function(cmd_opts)
     local text = cmd_opts.args
     local current_file = vim.api.nvim_buf_get_name(0)
@@ -239,6 +278,7 @@ M.send_to_terminal = function(cmd_opts)
     send_text_to_terminal(text)
 end
 
+--- Send the visual selection to the terminal
 M.send_visual_selection = function()
     -- Exit visual mode to update '< and '> marks, then get the selection
     -- This ensures we get the actual selected range regardless of selection direction
@@ -271,6 +311,8 @@ M.send_visual_selection = function()
     send_text_to_terminal(text)
 end
 
+--- Send the current cell to the terminal and jump to next cell
+--- Cells are delimited by # %%, -- %%, In[n], or ``` markers
 M.send_current_cell = function()
     local current_line = vim.api.nvim_win_get_cursor(0)[1]
     local total_lines = vim.api.nvim_buf_line_count(0)
@@ -326,6 +368,8 @@ M.send_current_cell = function()
     end
 end
 
+--- Send text based on operator motion (for use with operator-pending mode)
+--- @param motion_type string Type of motion: "char", "line", or "block"
 M.operator_send = function(motion_type)
     if motion_type == "block" then
         vim.notify("Block selection not supported", vim.log.levels.WARN)
@@ -349,6 +393,10 @@ M.operator_send = function(motion_type)
     end
 end
 
+--- Cycle between terminal focus states
+--- In terminal mode: exit to normal mode and jump to bottom
+--- In normal mode (terminal buffer): switch to last active window
+--- Elsewhere: focus terminal and enter terminal mode
 M.cycle = function()
     local term = marked_terminal
     local current_buf = vim.api.nvim_get_current_buf()
@@ -384,6 +432,8 @@ M.cycle = function()
     vim.cmd.startinsert()
 end
 
+--- Initialize the terminal buffer and start the shell/REPL process
+--- @param buf_ready boolean Whether the buffer already exists and is ready
 local init_buffer = function(buf_ready)
     local term = marked_terminal
     local cmd = eval_opts(CONFIG.cmd) or vim.o.shell
@@ -425,11 +475,14 @@ local init_buffer = function(buf_ready)
     end
 end
 
+--- Check if the terminal window is currently open
+--- @return boolean True if the terminal window is open and valid
 local is_open = function()
     local term = marked_terminal
     return term.win and vim.api.nvim_win_is_valid(term.win)
 end
 
+--- Toggle the terminal window visibility
 M.toggle = function()
     if is_open() then
         M.close()
@@ -438,6 +491,7 @@ M.toggle = function()
     end
 end
 
+--- Open the terminal window (creates buffer if needed)
 M.open = function()
     if is_open() then
         return
@@ -474,6 +528,7 @@ M.open = function()
     end
 end
 
+--- Close the terminal window (keeps buffer alive)
 M.close = function()
     local term = marked_terminal
     if is_open() then
@@ -482,6 +537,9 @@ M.close = function()
     end
 end
 
+--- Setup function to initialize Shelly with user configuration
+--- Creates user commands and autocommands
+--- @param opts table? Optional configuration table to override defaults
 M.setup = function(opts)
     CONFIG = vim.tbl_deep_extend("force", CONFIG, opts or {})
 
