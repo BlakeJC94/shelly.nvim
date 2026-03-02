@@ -31,7 +31,7 @@ local CONFIG = {
         spell = false,
         wrap = false,
     },
-    capture_register = "+", -- register to store terminal output after each send
+    capture_register = "+", -- register to store terminal output after each send; set to nil to disable capture
     capture_delay = 500,    -- ms to wait after sending before reading terminal output
     prompt_patterns = {
         "^In %[%d+%]:%s*$", -- IPython prompt
@@ -350,7 +350,9 @@ end
 
 --- Send text to the marked terminal, auto-detecting IPython mode
 --- After a configurable delay the output produced by the command is captured
---- into CONFIG.capture_register (default: unnamed register).
+--- into CONFIG.capture_register as linewise content, commented using the
+--- source buffer's commentstring, ready to paste with `p`.
+--- Capture is skipped when CONFIG.capture_register is nil.
 --- @param text string Text to send to the terminal
 local function send_text_to_terminal(text)
     if not marked_terminal.buf or not vim.api.nvim_buf_is_valid(marked_terminal.buf) then
@@ -385,6 +387,10 @@ local function send_text_to_terminal(text)
         end, 50)
     else
         vim.api.nvim_chan_send(marked_terminal.job_id, text .. "\n")
+    end
+
+    if CONFIG.capture_register == nil then
+        return
     end
 
     -- Snapshot the comment prefix from the source buffer now, before focus may change.

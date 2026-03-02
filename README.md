@@ -12,6 +12,7 @@ execution.
 - **Smart text sending** – Lines, visual selections, operator motions, or cells
 - **IPython aware** – Auto-detects IPython and uses `%cpaste` for multi-line input
 - **Cell execution** – Send code cells delimited by `# %%`, `-- %%`, `` ``` ``, or `In[n]` markers
+- **Output capture** – Terminal output is automatically captured into a register after each send, commented and ready to paste
 - **Safety first** – Prevents accidental code execution in shell processes
 - **Persistent** – Terminal buffer persists across toggles
 
@@ -112,6 +113,18 @@ require("shelly").setup({
         spell = false,
         wrap = false,
     },
+    capture_register = "+",     -- Register to store output after each send; set to nil to disable
+    capture_delay = 500,        -- ms to wait after sending before reading terminal output
+    prompt_patterns = {         -- Lua patterns for lines to strip from captured output
+        "^In %[%d+%]:%s*$",     -- IPython prompt
+        "^%.%.%.:%s*$",          -- IPython continuation
+        "^>>>%s*$",              -- Python / MicroPython prompt
+        "^%.%.%.%s*$",           -- Python continuation
+        "^>%s*$",               -- Node, R, Lua prompt
+        "^:%s*$",               -- Julia prompt
+        "^%%cpaste",            -- IPython %cpaste command
+        "^<EOF>$",              -- IPython %cpaste EOF marker
+    },
 })
 ```
 
@@ -146,6 +159,21 @@ Cells are automatically detected between:
 - `` ``` `` (Markdown code blocks)
 
 When sending a cell, the cursor jumps to the next cell automatically.
+
+## Output Capture
+
+After every send, Shelly waits `capture_delay` ms then reads the new lines from
+the terminal buffer, cleans them up, and stores the result in `capture_register`
+as linewise content. Use `p` to paste the output below the cursor.
+
+The captured output is:
+
+- Stripped of ANSI/terminal escape sequences
+- Stripped of echoed input lines
+- Stripped of prompt and control lines (configurable via `prompt_patterns`)
+- Prefixed with the source buffer's comment string (e.g. `# ` for Python, `-- ` for Lua)
+
+Set `capture_register = nil` to disable capture entirely.
 
 ## IPython Support
 
