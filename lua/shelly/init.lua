@@ -4,7 +4,13 @@ local M = {}
 
 --- Store the marked terminal info
 --- @type { buf: number?, job_id: number?, win: number? }
-local marked_terminal = { buf = nil, job_id = nil, win = nil }
+local marked_terminal = {
+    buf = nil,
+    job_id = nil,
+    win = nil,
+    split_size = nil,
+    split_direction = nil,
+}
 
 --- Default configuration for Shelly
 --- @type table
@@ -44,14 +50,34 @@ local function eval_opts(opts)
     return opts
 end
 
+--- Get the split size to use when opening the window
+--- Returns the last known size from state if the user has resized, otherwise falls back to the config default
+--- @return number Split size in lines (horizontal) or columns (vertical)
+local function get_split_size()
+    if marked_terminal.split_size ~= nil then
+        return marked_terminal.split_size
+    end
+    return eval_opts(CONFIG.split).size
+end
+
+--- Get the split direction to use when opening the window
+--- Returns the last known direction from state if the user has rotated the split, otherwise falls back to the config default
+--- @return string Split direction ("horizontal" or "vertical")
+local function get_split_direction()
+    if marked_terminal.split_direction ~= nil then
+        return marked_terminal.split_direction
+    end
+    return eval_opts(CONFIG.split).direction
+end
+
 --- Generate the Vim split command based on configuration
 --- @param config table Configuration containing split settings
 --- @return string Vim command string for creating a split
 local function get_split_cmd(config)
     local opts = eval_opts(config.split)
     local pos = (opts.position == "left" or opts.position == "top") and "topleft" or "botright"
-    local dir = opts.direction == "vertical" and " vertical" or ""
-    return pos .. dir .. " " .. opts.size .. "split"
+    local dir = get_split_direction() == "vertical" and " vertical" or ""
+    return pos .. dir .. " " .. get_split_size() .. "split"
 end
 
 --- Create a new window split and configure window options
@@ -65,6 +91,33 @@ local function create_win(config, buf)
     for opt, val in pairs(config.wo) do
         vim.wo[win][opt] = val
     end
+
+    -- persist size and direction whenever this window is resized or rotated
+    vim.api.nvim_create_autocmd("WinResized", {
+        callback = function()
+            if not vim.api.nvim_win_is_valid(win) then
+                return true -- delete the autocmd
+            end
+            -- v:event.windows contains the list of window IDs that were resized
+            local resized = vim.v.event.windows or {}
+            for _, wid in ipairs(resized) do
+                if wid == win then
+                    local win_width = vim.api.nvim_win_get_width(win)
+                    local win_height = vim.api.nvim_win_get_height(win)
+                    -- infer direction: a window spanning the full editor height is a vertical split
+                    if win_height >= vim.o.lines - vim.o.cmdheight - 1 then
+                        marked_terminal.split_direction = "vertical"
+                        marked_terminal.split_size = win_width
+                    else
+                        marked_terminal.split_direction = "horizontal"
+                        marked_terminal.split_size = win_height
+                    end
+                    break
+                end
+            end
+        end,
+    })
+
     return win
 end
 
