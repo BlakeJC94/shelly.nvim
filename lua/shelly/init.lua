@@ -31,6 +31,8 @@ local CONFIG = {
         spell = false,
         wrap = false,
     },
+    capture_register = "+", -- register to store terminal output after each send
+    capture_delay = 500,     -- ms to wait after sending before reading terminal output
 }
 
 --- Recursively evaluate options, calling functions and traversing tables
@@ -259,7 +261,45 @@ local function validate_send_conditions()
     return true
 end
 
+--- Strip ANSI/terminal escape sequences from a string
+--- @param s string Raw string possibly containing escape codes
+--- @return string Cleaned string
+local function strip_ansi(s)
+    return s:gsub("\27%[[%d;]*[A-Za-z]", "")
+end
+
+--- Capture new terminal output into the configured register
+--- Reads lines added to the terminal buffer since line_count_before,
+--- drops the first line (echoed input), strips escape codes and trailing
+--- blank lines, then stores the result in CONFIG.capture_register.
+--- @param buf number Terminal buffer number
+--- @param line_count_before number Line count snapshot taken before sending
+local function capture_terminal_output(buf, line_count_before)
+    if not vim.api.nvim_buf_is_valid(buf) then
+        return
+    end
+
+    local lines = vim.api.nvim_buf_get_lines(buf, line_count_before, -1, false)
+
+    -- Strip ANSI escape sequences
+    for i, line in ipairs(lines) do
+        lines[i] = strip_ansi(line)
+    end
+
+    -- Strip trailing blank lines
+    while #lines > 0 and lines[#lines]:match("^%s*$") do
+        table.remove(lines)
+    end
+
+    -- Only overwrite the register when there is something to store
+    if #lines > 0 then
+        vim.fn.setreg(CONFIG.capture_register, table.concat(lines, "\n"))
+    end
+end
+
 --- Send text to the marked terminal, auto-detecting IPython mode
+--- After a configurable delay the output produced by the command is captured
+--- into CONFIG.capture_register (default: unnamed register).
 --- @param text string Text to send to the terminal
 local function send_text_to_terminal(text)
     if not marked_terminal.buf or not vim.api.nvim_buf_is_valid(marked_terminal.buf) then
@@ -272,8 +312,20 @@ local function send_text_to_terminal(text)
         return
     end
 
+    local buf = marked_terminal.buf
+
+    -- Snapshot the last non-empty line index so that trailing empty lines in
+    -- the terminal buffer are not counted; output that fills those lines would
+    -- otherwise be skipped by capture_terminal_output.
+    local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local line_count_before = #all_lines
+    while line_count_before > 0 and all_lines[line_count_before]:match("^%s*$") do
+        line_count_before = line_count_before - 1
+    end
+    line_count_before = line_count_before - 1
+
     -- Auto-detect IPython mode
-    if is_ipython(marked_terminal.buf) then
+    if is_ipython(buf) then
         -- Use IPython's %cpaste mode for multi-line code
         vim.api.nvim_chan_send(marked_terminal.job_id, "%cpaste -q\n")
         vim.defer_fn(function()
@@ -283,6 +335,10 @@ local function send_text_to_terminal(text)
     else
         vim.api.nvim_chan_send(marked_terminal.job_id, text .. "\n")
     end
+
+    vim.defer_fn(function()
+        capture_terminal_output(buf, line_count_before)
+    end, CONFIG.capture_delay)
 end
 
 --- Check if a line is a cell delimiter (for cell-based execution)
