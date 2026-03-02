@@ -294,11 +294,13 @@ end
 --- Reads lines added to the terminal buffer since line_count_before,
 --- removes sent_lines from the top of the captured output (in order, one
 --- match at a time), strips prompt/control lines, strips escape codes and
---- trailing blank lines, then stores the result in CONFIG.capture_register.
+--- trailing blank lines, prepends comment_prefix to each line, then stores
+--- the result in CONFIG.capture_register.
 --- @param buf number Terminal buffer number
 --- @param line_count_before number Line count snapshot taken before sending
 --- @param sent_lines string[] Individual lines that were sent (used to strip echoed input)
-local function capture_terminal_output(buf, line_count_before, sent_lines)
+--- @param comment_prefix string Comment prefix from the source buffer's commentstring
+local function capture_terminal_output(buf, line_count_before, sent_lines, comment_prefix)
     if not vim.api.nvim_buf_is_valid(buf) then
         return
     end
@@ -337,7 +339,12 @@ local function capture_terminal_output(buf, line_count_before, sent_lines)
 
     -- Only overwrite the register when there is something to store
     if #lines > 0 then
-        vim.fn.setreg(CONFIG.capture_register, table.concat(lines, "\n"))
+        -- Prepend the comment prefix from the source buffer's commentstring
+        for i, line in ipairs(lines) do
+            lines[i] = comment_prefix .. " " .. line
+        end
+        -- Use linewise register type so that `p` pastes below the current line
+        vim.fn.setreg(CONFIG.capture_register, table.concat(lines, "\n"), "l")
     end
 end
 
@@ -380,9 +387,14 @@ local function send_text_to_terminal(text)
         vim.api.nvim_chan_send(marked_terminal.job_id, text .. "\n")
     end
 
+    -- Snapshot the comment prefix from the source buffer now, before focus may change.
+    -- commentstring is typically "# %s" or "-- %s"; extract everything before " %s".
+    local cs = vim.bo.commentstring or ""
+    local comment_prefix = cs:match("^(.-)%s*%%s") or ""
+
     local sent_lines = vim.split(text, "\n", { plain = true })
     vim.defer_fn(function()
-        capture_terminal_output(buf, line_count_before, sent_lines)
+        capture_terminal_output(buf, line_count_before, sent_lines, comment_prefix)
     end, CONFIG.capture_delay)
 end
 
