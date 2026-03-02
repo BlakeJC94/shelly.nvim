@@ -32,7 +32,17 @@ local CONFIG = {
         wrap = false,
     },
     capture_register = "+", -- register to store terminal output after each send
-    capture_delay = 500,     -- ms to wait after sending before reading terminal output
+    capture_delay = 500,    -- ms to wait after sending before reading terminal output
+    prompt_patterns = {
+        "^In %[%d+%]:%s*$", -- IPython prompt
+        "^%.%.%.:%s*$",      -- IPython continuation
+        "^>>>%s*$",          -- Python / MicroPython prompt
+        "^%.%.%.%s*$",       -- Python continuation
+        "^>%s*$",            -- Node, R, Lua prompt
+        "^:%s*$",            -- Julia prompt
+        "%%cpaste",          -- IPython %cpaste command
+        "^<EOF>$",            -- IPython %cpaste EOF marker
+    },
 }
 
 --- Recursively evaluate options, calling functions and traversing tables
@@ -268,13 +278,27 @@ local function strip_ansi(s)
     return s:gsub("\27%[[%d;]*[A-Za-z]", "")
 end
 
+--- Return true if a line matches any prompt or control pattern from CONFIG
+--- @param line string
+--- @return boolean
+local function is_prompt_line(line)
+    for _, pat in ipairs(CONFIG.prompt_patterns) do
+        if line:match(pat) then
+            return true
+        end
+    end
+    return false
+end
+
 --- Capture new terminal output into the configured register
 --- Reads lines added to the terminal buffer since line_count_before,
---- drops the first line (echoed input), strips escape codes and trailing
---- blank lines, then stores the result in CONFIG.capture_register.
+--- removes sent_lines from the top of the captured output (in order, one
+--- match at a time), strips prompt/control lines, strips escape codes and
+--- trailing blank lines, then stores the result in CONFIG.capture_register.
 --- @param buf number Terminal buffer number
 --- @param line_count_before number Line count snapshot taken before sending
-local function capture_terminal_output(buf, line_count_before)
+--- @param sent_lines string[] Individual lines that were sent (used to strip echoed input)
+local function capture_terminal_output(buf, line_count_before, sent_lines)
     if not vim.api.nvim_buf_is_valid(buf) then
         return
     end
@@ -285,6 +309,26 @@ local function capture_terminal_output(buf, line_count_before)
     for i, line in ipairs(lines) do
         lines[i] = strip_ansi(line)
     end
+
+    -- Remove sent lines from the top of the captured output in order.
+    -- For each sent line, scan from the current top and remove the first match.
+    for _, sent in ipairs(sent_lines) do
+        for i = 1, #lines do
+            if lines[i] == sent then
+                table.remove(lines, i)
+                break
+            end
+        end
+    end
+
+    -- Remove all prompt and control lines (prompts, %cpaste, EOF markers, etc.)
+    local filtered = {}
+    for _, line in ipairs(lines) do
+        if not is_prompt_line(line) then
+            filtered[#filtered + 1] = line
+        end
+    end
+    lines = filtered
 
     -- Strip trailing blank lines
     while #lines > 0 and lines[#lines]:match("^%s*$") do
@@ -336,8 +380,9 @@ local function send_text_to_terminal(text)
         vim.api.nvim_chan_send(marked_terminal.job_id, text .. "\n")
     end
 
+    local sent_lines = vim.split(text, "\n", { plain = true })
     vim.defer_fn(function()
-        capture_terminal_output(buf, line_count_before)
+        capture_terminal_output(buf, line_count_before, sent_lines)
     end, CONFIG.capture_delay)
 end
 
