@@ -312,17 +312,17 @@ local function capture_terminal_output(buf, line_count_before, sent_lines, comme
         lines[i] = strip_ansi(line)
     end
 
-    -- Remove sent lines from the top of the captured output in order.
-    -- For each sent line, scan from the current top and remove the first match.
-    for _, sent in ipairs(sent_lines) do
-        for i = 1, #lines do
-            if lines[i] == sent then
-                table.remove(lines, i)
-                break
-            end
-        end
-    end
-
+    -- -- Remove sent lines from the top of the captured output in order.
+    -- -- For each sent line, scan from the current top and remove the first match.
+    -- for _, sent in ipairs(sent_lines) do
+    --     for i = 1, #lines do
+    --         if lines[i]:match(sent) or is_prompt_line(lines[i]) then
+    --             table.remove(lines, i)
+    --             break
+    --         end
+    --     end
+    -- end
+    --
     -- Remove all prompt and control lines (prompts, %cpaste, EOF markers, etc.)
     local filtered = {}
     for _, line in ipairs(lines) do
