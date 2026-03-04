@@ -32,7 +32,7 @@ local CONFIG = {
         wrap = false,
     },
     capture_register = "+", -- register to store terminal output after each send; set to nil to disable capture
-    capture_comment = true,  -- prepend comment strings to captured lines
+    capture_comment = true, -- prepend comment strings to captured lines
     capture_delay = 800, -- ms to wait after sending before reading terminal output
     prompt_patterns = {
         r = {
@@ -45,7 +45,7 @@ local CONFIG = {
             "^In %[%d+%]: ",
             "^%%cpaste",
             "^<EOF>",
-        }
+        },
     },
 }
 
@@ -294,6 +294,10 @@ local function is_prompt_line(line, prompt_line_pats)
     return false
 end
 
+local function escape_pattern(s)
+    return s:gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%1")
+end
+
 --- Capture new terminal output into the configured register
 --- Reads lines added to the terminal buffer since line_count_before,
 --- removes sent_lines from the top of the captured output (in order, one
@@ -320,7 +324,7 @@ local function capture_terminal_output(buf, line_count_before, sent_lines, comme
     -- For each sent line, scan from the current top and remove the first match.
     for _, sent in ipairs(sent_lines) do
         for i = 1, #lines do
-            if lines[i]:match(sent) then
+            if lines[i]:match(escape_pattern(sent)) then
                 table.remove(lines, i)
                 break
             end
