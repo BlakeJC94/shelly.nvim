@@ -32,16 +32,19 @@ local CONFIG = {
         wrap = false,
     },
     capture_register = "+", -- register to store terminal output after each send; set to nil to disable capture
-    capture_delay = 500,    -- ms to wait after sending before reading terminal output
+    capture_delay = 800, -- ms to wait after sending before reading terminal output
     prompt_patterns = {
-        "^In %[%d+%]:%s*$", -- IPython prompt
-        "^%.%.%.:%s*$",      -- IPython continuation
-        "^>>>%s*$",          -- Python / MicroPython prompt
-        "^%.%.%.%s*$",       -- Python continuation
-        "^>%s*$",            -- Node, R, Lua prompt
-        "^:%s*$",            -- Julia prompt
-        "%%cpaste",          -- IPython %cpaste command
-        "^<EOF>$",            -- IPython %cpaste EOF marker
+        r = {
+            "^> ",
+            "^+ ",
+        },
+        python = {
+            "^>>> ",
+            "^%.%.%.: ",
+            "^In %[%d+%]: ",
+            "^%%cpaste",
+            "^<EOF>",
+        }
     },
 }
 
@@ -281,8 +284,8 @@ end
 --- Return true if a line matches any prompt or control pattern from CONFIG
 --- @param line string
 --- @return boolean
-local function is_prompt_line(line)
-    for _, pat in ipairs(CONFIG.prompt_patterns) do
+local function is_prompt_line(line, prompt_line_pats)
+    for _, pat in ipairs(prompt_line_pats) do
         if line:match(pat) then
             return true
         end
@@ -300,7 +303,7 @@ end
 --- @param line_count_before number Line count snapshot taken before sending
 --- @param sent_lines string[] Individual lines that were sent (used to strip echoed input)
 --- @param comment_prefix string Comment prefix from the source buffer's commentstring
-local function capture_terminal_output(buf, line_count_before, sent_lines, comment_prefix)
+local function capture_terminal_output(buf, line_count_before, sent_lines, comment_prefix, prompt_line_pats)
     if not vim.api.nvim_buf_is_valid(buf) then
         return
     end
@@ -312,21 +315,21 @@ local function capture_terminal_output(buf, line_count_before, sent_lines, comme
         lines[i] = strip_ansi(line)
     end
 
-    -- -- Remove sent lines from the top of the captured output in order.
-    -- -- For each sent line, scan from the current top and remove the first match.
-    -- for _, sent in ipairs(sent_lines) do
-    --     for i = 1, #lines do
-    --         if lines[i]:match(sent) or is_prompt_line(lines[i]) then
-    --             table.remove(lines, i)
-    --             break
-    --         end
-    --     end
-    -- end
-    --
+    -- Remove sent lines from the top of the captured output in order.
+    -- For each sent line, scan from the current top and remove the first match.
+    for _, sent in ipairs(sent_lines) do
+        for i = 1, #lines do
+            if lines[i]:match(sent) then
+                table.remove(lines, i)
+                break
+            end
+        end
+    end
+
     -- Remove all prompt and control lines (prompts, %cpaste, EOF markers, etc.)
     local filtered = {}
     for _, line in ipairs(lines) do
-        if not is_prompt_line(line) then
+        if not is_prompt_line(line, prompt_line_pats) then
             filtered[#filtered + 1] = line
         end
     end
@@ -346,6 +349,7 @@ local function capture_terminal_output(buf, line_count_before, sent_lines, comme
         -- Use linewise register type so that `p` pastes below the current line
         vim.fn.setreg(CONFIG.capture_register, table.concat(lines, "\n"), "l")
     end
+    ::continue::
 end
 
 --- Send text to the marked terminal, auto-detecting IPython mode
@@ -398,9 +402,12 @@ local function send_text_to_terminal(text)
     local cs = vim.bo.commentstring or ""
     local comment_prefix = cs:match("^(.-)%s*%%s") or ""
 
+    local ft = vim.bo.filetype
+    local prompt_line_pats = CONFIG.prompt_patterns[ft] or {}
+
     local sent_lines = vim.split(text, "\n", { plain = true })
     vim.defer_fn(function()
-        capture_terminal_output(buf, line_count_before, sent_lines, comment_prefix)
+        capture_terminal_output(buf, line_count_before, sent_lines, comment_prefix, prompt_line_pats)
     end, CONFIG.capture_delay)
 end
 

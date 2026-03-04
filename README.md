@@ -114,16 +114,19 @@ require("shelly").setup({
         wrap = false,
     },
     capture_register = "+",     -- Register to store output after each send; set to nil to disable
-    capture_delay = 500,        -- ms to wait after sending before reading terminal output
+    capture_delay = 800,        -- ms to wait after sending before reading terminal output
     prompt_patterns = {         -- Lua patterns for lines to strip from captured output
-        "^In %[%d+%]:%s*$",     -- IPython prompt
-        "^%.%.%.:%s*$",          -- IPython continuation
-        "^>>>%s*$",              -- Python / MicroPython prompt
-        "^%.%.%.%s*$",           -- Python continuation
-        "^>%s*$",               -- Node, R, Lua prompt
-        "^:%s*$",               -- Julia prompt
-        "^%%cpaste",            -- IPython %cpaste command
-        "^<EOF>$",              -- IPython %cpaste EOF marker
+        r = {
+            "^> ",
+            "^+ ",
+        },
+        python = {
+            "^>>> ",
+            "^%.%.%.: ",
+            "^In %[%d+%]: ",
+            "^%%cpaste",
+            "^<EOF>",
+        }
     },
 })
 ```
@@ -171,7 +174,7 @@ The captured output is:
 - Stripped of ANSI/terminal escape sequences
 - Stripped of echoed input lines
 - Stripped of prompt and control lines (configurable via `prompt_patterns`)
-- Prefixed with the source buffer's comment string (e.g. `# ` for Python, `-- ` for Lua)
+- Prefixed with the source buffer's comment string (e.g. `#` for Python, `--` for Lua)
 
 Set `capture_register = nil` to disable capture entirely.
 
