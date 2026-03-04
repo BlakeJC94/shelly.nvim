@@ -4,7 +4,7 @@ A minimal Neovim plugin for managing a toggleable terminal and sending text to
 it. Designed for REPL-driven development with IPython support and cell-based
 execution.
 
-[![asciicast](https://asciinema.org/a/JJ0GkHbsqKCJIKUj.svg)](https://asciinema.org/a/JJ0GkHbsqKCJIKUj)
+[![asciicast](https://asciinema.org/a/4wRN4EwcPh0qe482.svg)](https://asciinema.org/a/4wRN4EwcPh0qe482)
 
 ## Features
 
