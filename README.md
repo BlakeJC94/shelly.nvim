@@ -114,6 +114,7 @@ require("shelly").setup({
         wrap = false,
     },
     capture_register = "+",     -- Register to store output after each send; set to nil to disable
+    capture_comment = true,  -- prepend comment strings to captured lines
     capture_delay = 800,        -- ms to wait after sending before reading terminal output
     prompt_patterns = {         -- Lua patterns for lines to strip from captured output
         r = {

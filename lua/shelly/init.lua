@@ -32,6 +32,7 @@ local CONFIG = {
         wrap = false,
     },
     capture_register = "+", -- register to store terminal output after each send; set to nil to disable capture
+    capture_comment = true,  -- prepend comment strings to captured lines
     capture_delay = 800, -- ms to wait after sending before reading terminal output
     prompt_patterns = {
         r = {
@@ -343,13 +344,14 @@ local function capture_terminal_output(buf, line_count_before, sent_lines, comme
     -- Only overwrite the register when there is something to store
     if #lines > 0 then
         -- Prepend the comment prefix from the source buffer's commentstring
-        for i, line in ipairs(lines) do
-            lines[i] = comment_prefix .. " " .. line
+        if CONFIG.capture_comment then
+            for i, line in ipairs(lines) do
+                lines[i] = comment_prefix .. " " .. line
+            end
         end
         -- Use linewise register type so that `p` pastes below the current line
         vim.fn.setreg(CONFIG.capture_register, table.concat(lines, "\n"), "l")
     end
-    ::continue::
 end
 
 --- Send text to the marked terminal, auto-detecting IPython mode
